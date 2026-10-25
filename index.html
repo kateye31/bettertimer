@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Better Timer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style id="timer-css">
+  :root {
+    --bg: #2f2f2f;
+    --fg: #ffffff;
+    --idle: #8f8f8f;
+    --ctrl: #8f8f8f;
+    --warn: #ffb020;
+    --end: #ff4d4d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg);
+    font-family: "Roboto", Arial, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    transition: background-color .4s;
+  }
+  #timer {
+    position: relative;
+    width: 100vw; height: 100vh;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    transition: background-color .4s;
+  }
+
+  /* ---------- digits ---------- */
+  #time {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--idle);
+    font-size: min(34vw, 62vh);
+    margin-top: 2vh;
+    cursor: pointer;
+    transition: color .3s;
+    white-space: nowrap;
+  }
+  #time.long { font-size: min(21vw, 50vh); }
+  #timer.running #time { color: var(--fg); }
+  #timer.warn #time { color: var(--warn); }
+  #timer.over #time { color: var(--end); }
+  #timer.flash #time { animation: flash 1s steps(1) infinite; }
+  @keyframes flash { 50% { opacity: .15; } }
+
+  /* ---------- controls ---------- */
+  .ctrl {
+    position: absolute;
+    background: none; border: 0; padding: 0;
+    color: var(--ctrl);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .35s, color .2s, transform .15s;
+  }
+  .ctrl:hover { color: #fff; }
+  .ctrl svg { width: 100%; height: 100%; fill: currentColor; }
+  #gear  { top: 4.5vh; left: 3.2vw; width: max(22px, 7vh); height: max(22px, 7vh); }
+  #close { top: 4.5vh; right: 3.2vw; width: max(20px, 6vh); height: max(20px, 6vh); }
+  #popout{ top: 4.8vh; right: calc(3.2vw + max(20px, 6vh) + 2.4vw); width: max(18px, 5.4vh); height: max(18px, 5.4vh); }
+  #play {
+    top: 3vh; left: 50%; transform: translateX(-50%);
+    width: max(36px, 14vh); height: max(36px, 14vh);
+    border-radius: 50%;
+    background: #fff; color: #2f2f2f;
+  }
+  #play:hover { transform: translateX(-50%) scale(1.06); color: #000; }
+  #play svg { width: 48%; height: 48%; }
+  #timer.running #play { background: #eee; }
+
+  #bottom {
+    position: absolute; left: 0; right: 0; bottom: 3vh;
+    text-align: center;
+    color: var(--ctrl);
+    font-weight: 700;
+    font-size: max(12px, 6.4vh);
+    cursor: pointer;
+    transition: opacity .35s, color .2s;
+  }
+  #bottom:hover { color: #fff; }
+  #bottom .pause-ico { letter-spacing: -0.1em; margin-right: .35em; }
+
+  /* hide controls when idle while running */
+  #timer.hide-ui .ctrl, #timer.hide-ui #bottom { opacity: 0; pointer-events: none; }
+  #timer.hide-ui { cursor: none; }
+
+  /* ---------- settings ---------- */
+  #settings {
+    position: absolute; inset: 0;
+    background: rgba(20,20,20,.97);
+    color: #eee;
+    display: none;
+    overflow-y: auto;
+    padding: 24px 28px 28px;
+    font-size: 15px;
+    z-index: 10;
+  }
+  #settings.open { display: block; }
+  #settings h2 { margin: 0 0 18px; font-size: 20px; font-weight: 700; color: #fff; }
+  #settings h3 { margin: 22px 0 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #9a9a9a; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #aaa; }
+  .field input[type=number] {
+    width: 84px; padding: 8px 10px;
+    font: 700 22px "Roboto", sans-serif;
+    background: #2f2f2f; color: #fff;
+    border: 2px solid #444; border-radius: 6px;
+  }
+  .field input[type=number]:focus { outline: none; border-color: #fff; }
+  .presets button, .btn {
+    background: #3a3a3a; color: #eee; border: 0; border-radius: 6px;
+    padding: 8px 12px; font: 500 14px "Roboto", sans-serif; cursor: pointer;
+  }
+  .presets button:hover, .btn:hover { background: #505050; }
+  .btn.primary { background: #fff; color: #222; font-weight: 700; }
+  .btn.primary:hover { background: #ddd; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sw {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 3px solid transparent; cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+  }
+  .sw.sel { border-color: #fff; }
+  .sw.custom { position: relative; overflow: hidden; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
+  .sw.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  label.check { display: flex; gap: 8px; align-items: center; cursor: pointer; margin: 6px 0; }
+  .actions { display: flex; gap: 10px; margin-top: 26px; }
+  #settings .x { position: absolute; top: 16px; right: 20px; background: none; border: 0; color: #aaa; font-size: 28px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="timer">
+  <button class="ctrl" id="gear" title="Settings (S)">
+    <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.48.48 0 0 0 13.92 2h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.72 8.47a.47.47 0 0 0 .12.61l2.03 1.58c-.05.31-.09.63-.09.94s.02.63.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.47.47 0 0 0-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+  </button>
+  <button class="ctrl" id="play" title="Start / Stop (Space)"></button>
+  <button class="ctrl" id="popout" title="Pop out (always on top)">
+    <svg viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+  </button>
+  <button class="ctrl" id="close" title="Reset (R) / close pop-out">
+    <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" stroke="currentColor" stroke-width="1.6"/></svg>
+  </button>
+
+  <div id="time">05:00</div>
+  <div id="bottom"></div>
+
+  <div id="settings">
+    <button class="x" id="settingsClose" title="Close">&times;</button>
+    <h2>Timer settings</h2>
+
+    <h3>Time</h3>
+    <div class="row">
+      <div class="field">Hours<input type="number" id="inH" min="0" max="99" value="0"></div>
+      <div class="field">Minutes<input type="number" id="inM" min="0" max="59" value="5"></div>
+      <div class="field">Seconds<input type="number" id="inS" min="0" max="59" value="0"></div>
+    </div>
+    <div class="row presets" style="margin-top:10px">
+      <button data-min="1">1m</button><button data-min="5">5m</button><button data-min="10">10m</button>
+      <button data-min="15">15m</button><button data-min="20">20m</button><button data-min="30">30m</button>
+      <button data-min="45">45m</button><button data-min="60">1h</button><button data-min="90">1h 30m</button>
+      <button data-min="120">2h</button>
+    </div>
+
+    <h3>Background</h3>
+    <div class="swatches" data-key="bg"></div>
+
+    <h3>Digits while running</h3>
+    <div class="swatches" data-key="fg"></div>
+
+    <h3>Warning color</h3>
+    <div class="swatches" data-key="warn"></div>
+    <div class="row" style="margin-top:10px">
+      <div class="field">Turn warning color with this many minutes left (0 = off)<input type="number" id="inWarn" min="0" max="999" value="1"></div>
+    </div>
+
+    <h3>Time's up color</h3>
+    <div class="swatches" data-key="end"></div>
+
+    <h3>Behavior</h3>
+    <label class="check"><input type="checkbox" id="optOver"> Keep counting overtime after 00:00 (shows −00:12)</label>
+    <label class="check"><input type="checkbox" id="optFlash" checked> Flash at 00:00</label>
+    <label class="check"><input type="checkbox" id="optBeep"> Beep at 00:00</label>
+    <label class="check"><input type="checkbox" id="optHide" checked> Hide buttons while running (move mouse to show)</label>
+    <label class="check"><input type="checkbox" id="optAutoPop" checked> Pop out automatically when I click away from this window</label>
+
+    <div class="actions">
+      <button class="btn primary" id="apply">Set timer</button>
+      <button class="btn" id="cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const PALETTES = {
+    bg:   ['#2f2f2f','#000000','#1b2a41','#0f3d3e','#2d1b3d','#3d1b1b','#14361f','#ffffff','#f4ead5','#ffd6e0'],
+    fg:   ['#ffffff','#7fdbff','#2ecc71','#ffdc00','#ff851b','#ff4fa3','#b388ff','#00e5c7','#222222'],
+    warn: ['#ffb020','#ffdc00','#ff851b','#ff4fa3','#b388ff'],
+    end:  ['#ff4d4d','#ff1744','#ff851b','#ff4fa3','#ffffff'],
+  };
+  const DEFAULTS = {
+    total: 300, bg: '#2f2f2f', fg: '#ffffff', warn: '#ffb020', end: '#ff4d4d',
+    warnMin: 1, over: false, flash: true, beep: false, hide: true, autoPop: true,
+  };
+
+  let cfg = { ...DEFAULTS };
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem('bettertimer') || '{}')); } catch {}
+  const save = () => { try { localStorage.setItem('bettertimer', JSON.stringify(cfg)); } catch {} };
+
+  const root = document.getElementById('timer');
+  const $ = id => root.querySelector('#' + id);   // works even after the timer moves into the pop-out
+  const timeEl = $('time'), bottom = $('bottom'), play = $('play');
+
+  const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" style="transform:translateX(1.5px)"/></svg>';
+  const ICON_STOP = '<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>';
+
+  // state
+  let remainingMs = cfg.total * 1000;
+  let running = false;
+  let endAt = 0;
+  let started = false;   // has run since last reset
+  let beeped = false;
+
+  function applyColors() {
+    for (const k of ['bg', 'fg', 'warn', 'end']) {
+      document.documentElement.style.setProperty('--' + k, cfg[k]);
+      root.style.setProperty('--' + k, cfg[k]);
+    }
+    // keep idle digits/controls readable on light backgrounds
+    const light = luminance(cfg.bg) > 0.55;
+    const muted = light ? 'rgba(0,0,0,.42)' : '#8f8f8f';
+    root.style.setProperty('--idle', muted);
+    root.style.setProperty('--ctrl', muted);
+  }
+  function luminance(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  }
+
+  function fmt(ms) {
+    const neg = ms < 0;
+    let s = neg ? Math.floor(-ms / 1000) : Math.ceil(ms / 1000);
+    const h = Math.floor(s / 3600); s %= 3600;
+    const m = Math.floor(s / 60); s %= 60;
+    const pad = n => String(n).padStart(2, '0');
+    return (neg ? '−' : '') + (h ? h + ':' + pad(m) : pad(m)) + ':' + pad(s);
+  }
+
+  function render() {
+    if (running) remainingMs = endAt - Date.now();
+    const done = remainingMs <= 0;
+    if (done && !cfg.over && running) { remainingMs = 0; stopRunning(); }
+    const txt = fmt(cfg.over ? remainingMs : Math.max(0, remainingMs));
+    if (timeEl.textContent !== txt) timeEl.textContent = txt;
+    timeEl.classList.toggle('long', txt.replace('−', '').length > 5);
+
+    const warn = !done && started && cfg.warnMin > 0 && remainingMs <= cfg.warnMin * 60000;
+    root.classList.toggle('running', running);
+    root.classList.toggle('warn', warn);
+    root.classList.toggle('over', done && started);
+    root.classList.toggle('flash', done && started && cfg.flash);
+
+    if (done && started && !beeped) { beeped = true; if (cfg.beep) beep(); }
+
+    play.innerHTML = running ? ICON_STOP : ICON_PLAY;
+    bottom.innerHTML = running
+      ? '<span class="pause-ico">❚❚</span>PAUSE'
+      : started && !done ? '▶ RESUME' : done && started ? '↺ RESET' : 'Click the time to start';
+  }
+
+  function start() {
+    if (remainingMs <= 0 && !cfg.over) reset();
+    endAt = Date.now() + remainingMs;
+    running = true; started = true;
+    render(); idleUI();
+  }
+  function stopRunning() { running = false; showUI(); }
+  function pause() { if (running) { remainingMs = endAt - Date.now(); stopRunning(); render(); } }
+  function reset() { running = false; started = false; beeped = false; remainingMs = cfg.total * 1000; showUI(); render(); }
+  function toggle() { running ? pause() : start(); }
+
+  play.onclick = () => running ? reset() : start();        // like the original: ▶ starts, ■ stops
+  timeEl.onclick = toggle;
+  bottom.onclick = () => {
+    if (running) pause();
+    else if (started && remainingMs <= 0) reset();
+    else start();
+  };
+  $('close').onclick = () => { if (pipWin) pipWin.close(); else reset(); };
+
+  // ---------- auto-hide controls while running ----------
+  let hideTimer;
+  function showUI() { root.classList.remove('hide-ui'); clearTimeout(hideTimer); }
+  function idleUI() {
+    showUI();
+    if (cfg.hide && running) hideTimer = setTimeout(() => running && root.classList.add('hide-ui'), 2500);
+  }
+  root.addEventListener('mousemove', idleUI);
+
+  // ---------- settings ----------
+  const settings = $('settings');
+  let draft;
+  function openSettings() {
+    pause();
+    draft = { ...cfg };
+    const t = cfg.total;
+    $('inH').value = Math.floor(t / 3600);
+    $('inM').value = Math.floor(t % 3600 / 60);
+    $('inS').value = t % 60;
+    $('inWarn').value = cfg.warnMin;
+    $('optOver').checked = cfg.over; $('optFlash').checked = cfg.flash; $('optBeep').checked = cfg.beep;
+    $('optHide').checked = cfg.hide; $('optAutoPop').checked = cfg.autoPop;
+    buildSwatches();
+    settings.classList.add('open');
+  }
+  function closeSettings(apply) {
+    if (apply) {
+      const clamp = (v, max) => Math.max(0, Math.min(max, parseInt(v, 10) || 0));
+      draft.total = clamp($('inH').value, 99) * 3600 + clamp($('inM').value, 59) * 60 + clamp($('inS').value, 59) || 1;
+      draft.warnMin = Math.max(0, parseFloat($('inWarn').value) || 0);
+      draft.over = $('optOver').checked; draft.flash = $('optFlash').checked; draft.beep = $('optBeep').checked;
+      draft.hide = $('optHide').checked; draft.autoPop = $('optAutoPop').checked;
+      cfg = draft; save(); reset();
+    }
+    applyColors();
+    settings.classList.remove('open');
+  }
+  function buildSwatches() {
+    settings.querySelectorAll('.swatches').forEach(box => {
+      const key = box.dataset.key;
+      box.innerHTML = '';
+      const colors = PALETTES[key].includes(draft[key]) ? PALETTES[key] : [...PALETTES[key], draft[key]];
+      for (const c of colors) {
+        const b = document.createElement('div');
+        b.className = 'sw' + (c === draft[key] ? ' sel' : '');
+        b.style.background = c; b.title = c;
+        b.onclick = () => { draft[key] = c; previewColors(); buildSwatches(); };
+        box.appendChild(b);
+      }
+      const custom = document.createElement('label');
+      custom.className = 'sw custom'; custom.title = 'Pick any color';
+      custom.innerHTML = `<input type="color" value="${draft[key]}">`;
+      custom.firstChild.oninput = e => { draft[key] = e.target.value; previewColors(); };
+      custom.firstChild.onchange = buildSwatches;
+      box.appendChild(custom);
+    });
+  }
+  function previewColors() { const keep = cfg; cfg = draft; applyColors(); cfg = keep; }
+
+  settings.querySelectorAll('.presets button').forEach(b => b.onclick = () => {
+    const m = +b.dataset.min;
+    $('inH').value = Math.floor(m / 60); $('inM').value = m % 60; $('inS').value = 0;
+  });
+  $('gear').onclick = openSettings;
+  $('apply').onclick = () => closeSettings(true);
+  $('cancel').onclick = $('settingsClose').onclick = () => closeSettings(false);
+  settings.addEventListener('keydown', e => { if (e.key === 'Enter') closeSettings(true); e.stopPropagation(); });
+
+  // ---------- keyboard ----------
+  function onKey(e) {
+    if (settings.classList.contains('open')) { if (e.key === 'Escape') closeSettings(false); return; }
+    if (e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.key === 'r' || e.key === 'R') reset();
+    else if (e.key === 's' || e.key === 'S') openSettings();
+    else if (e.key === 'p' || e.key === 'P') popOut();
+  }
+  document.addEventListener('keydown', onKey);
+
+  // ---------- beep ----------
+  function beep() {
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      [0, .35, .7].forEach(t => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
+        g.gain.setValueAtTime(.25, ac.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + t + .3);
+        o.start(ac.currentTime + t); o.stop(ac.currentTime + t + .3);
+      });
+    } catch {}
+  }
+
+  // ---------- pop out (always-on-top floating window) ----------
+  let pipWin = null, popping = false;
+  async function popOut() {
+    if (popping) return;
+    if (pipWin || !('documentPictureInPicture' in window)) {
+      if (!pipWin) alert('Pop-out needs Chrome or Edge (version 116+).');
+      return;
+    }
+    popping = true;
+    try {
+      pipWin = await documentPictureInPicture.requestWindow({ width: 480, height: 260 });
+    } catch { return; } finally { popping = false; }
+    const d = pipWin.document;
+    document.head.querySelectorAll('link[rel=stylesheet], style').forEach(n => d.head.appendChild(n.cloneNode(true)));
+    d.title = 'Timer';
+    d.body.appendChild(root);
+    d.addEventListener('keydown', onKey);
+    applyColors();
+    $('popout').style.display = 'none';
+    pipWin.addEventListener('pagehide', () => {
+      document.body.appendChild(root);
+      $('popout').style.display = '';
+      pipWin = null;
+      setTimeout(tick, 0);   // timers on the closed window are gone; restart here
+    });
+  }
+  $('popout').onclick = popOut;
+
+  // Browsers only allow a pop-out right after a click/keypress, so we arm it on every
+  // interaction and fire it when the window loses focus (i.e. you clicked elsewhere).
+  window.addEventListener('blur', () => { if (cfg.autoPop && !pipWin && navigator.userActivation?.isActive) popOut(); });
+  // Chrome can also auto-pop when you switch tabs if a media session is registered.
+  try { navigator.mediaSession.setActionHandler('enterpictureinpicture', () => cfg.autoPop && popOut()); } catch {}
+
+  // ---------- loop ----------
+  applyColors(); render();
+  // tick on the pop-out window when open so a hidden main tab doesn't throttle it
+  function tick() { render(); (pipWin || window).setTimeout(tick, 100); }
+  tick();
+})();
+</script>
+</body>
+</html>
